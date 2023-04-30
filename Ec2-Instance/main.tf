@@ -13,8 +13,8 @@ resource "aws_instance" "this" {
 
   user_data = <<-EOF
                 #!/bin/bash
-                echo "Hi, Welcome to my webpage" > index.html
-                nohup busybox httpd -f -p 8080 &
+                echo "Hi, Welcome to my webpage..!" > index.html
+                nohup busybox httpd -f -p ${var.web_server_port} &
                 EOF
 
   user_data_replace_on_change = true
@@ -24,8 +24,8 @@ resource "aws_security_group" "instance" {
   name = "tf-this-instance"
 
   ingress {
-    from_port   = 8080
-    to_port     = 8080
+    from_port   = var.web_server_port
+    to_port     = var.web_server_port
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
