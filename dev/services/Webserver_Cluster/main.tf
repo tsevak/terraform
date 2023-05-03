@@ -13,16 +13,26 @@ data "aws_subnets" "default" {
   }
 }
 
+data "terraform_remote_state" "db" {
+  backend = "s3"
+
+  config = {
+    bucket = "tf-state-dcl-2023"
+    key    = "dev/db/mysql/terraform.tfstate"
+    region = "ap-southeast-2"
+  }
+}
+
 resource "aws_launch_configuration" "this" {
   image_id        = "ami-03d0155c1ef44f68a"
   instance_type   = "t2.micro"
   security_groups = [aws_security_group.instance.id]
 
-  user_data = <<-EOF
-                #!/bin/bash
-                echo "Hi, Welcome to my webpage..!" > index.html
-                nohup busybox httpd -f -p ${var.web_server_port} &
-                EOF
+  user_data = templatefile("user-data.sh", {
+    web_server_port = var.web_server_port
+    db_address      = data.terraform_remote_state.db.outputs.address
+  })
+
   lifecycle {
     create_before_destroy = true
   }
