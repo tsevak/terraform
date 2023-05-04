@@ -1,4 +1,4 @@
-resource "aws_db_instance" "this"{
+resource "aws_db_instance" "this" {
   identifier_prefix   = "tf-dcl-db"
   engine              = "mysql"
   allocated_storage   = 10
