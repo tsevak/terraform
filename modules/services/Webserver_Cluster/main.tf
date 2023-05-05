@@ -1,6 +1,12 @@
-provider "aws" {
-  region = "ap-southeast-2"
+locals {
+  http_port    = 80
+  any_port     = 0
+  any_protocol = "-1"
+  tcp_protocol = "tcp"
+  all_ips      = ["0.0.0.0/0"]
 }
+
+
 
 data "aws_vpc" "default" {
   default = true
@@ -17,18 +23,18 @@ data "terraform_remote_state" "db" {
   backend = "s3"
 
   config = {
-    bucket = "tf-state-dcl-2023"
-    key    = "dev/db/mysql/terraform.tfstate"
+    bucket = var.db_remote_state_bucket
+    key    = var.db_remote_state_key
     region = "ap-southeast-2"
   }
 }
 
 resource "aws_launch_configuration" "this" {
   image_id        = "ami-03d0155c1ef44f68a"
-  instance_type   = "t2.micro"
+  instance_type   = var.instance_type
   security_groups = [aws_security_group.instance.id]
 
-  user_data = templatefile("user-data.sh", {
+  user_data = templatefile("${path.module}/user-data.sh", {
     web_server_port = var.web_server_port
     db_address      = data.terraform_remote_state.db.outputs.address
   })
@@ -44,18 +50,18 @@ resource "aws_autoscaling_group" "demo" {
 
   target_group_arns = [aws_alb_target_group.asg.arn]
   health_check_type = "ELB"
-  min_size          = 3
-  max_size          = 5
+  min_size          = var.min_size
+  max_size          = var.min_size
 
   tag {
     key                 = "Name"
-    value               = "tf-asg-webservers"
+    value               = "${var.cluster_name}-webserver"
     propagate_at_launch = true
   }
 }
 
 resource "aws_lb" "this" {
-  name               = "ALB-terraform-demo"
+  name               = "${var.cluster_name}-alb"
   load_balancer_type = "application"
   subnets            = data.aws_subnets.default.ids
   security_groups    = [aws_security_group.alb.id]
@@ -63,7 +69,7 @@ resource "aws_lb" "this" {
 
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.this.arn
-  port              = 80
+  port              = local.http_port
   protocol          = "HTTP"
 
   default_action {
@@ -94,24 +100,24 @@ resource "aws_alb_listener_rule" "this" {
 }
 
 resource "aws_security_group" "alb" {
-  name = "alb-terraform-sg-demo"
+  name = "${var.cluster_name}-sg"
 
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = local.http_port
+    to_port     = local.http_port
+    protocol    = local.tcp_protocol
+    cidr_blocks = local.all_ips
   }
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = local.any_port
+    to_port     = local.any_port
+    protocol    = local.any_protocol
+    cidr_blocks = local.all_ips
   }
 }
 
 resource "aws_alb_target_group" "asg" {
-  name     = "asg-terraform-demo"
+  name     = "${var.cluster_name}-asg"
   port     = var.web_server_port
   protocol = "HTTP"
   vpc_id   = data.aws_vpc.default.id
@@ -128,7 +134,7 @@ resource "aws_alb_target_group" "asg" {
 }
 
 resource "aws_security_group" "instance" {
-  name = "tf-this-instance"
+  name = "${var.cluster_name}-instance-sg"
 
   ingress {
     from_port   = var.web_server_port
